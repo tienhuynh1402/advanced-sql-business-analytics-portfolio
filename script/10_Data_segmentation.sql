@@ -1,0 +1,61 @@
+﻿/*
+===============================================================================
+Data Segmentation Analysis
+===============================================================================
+Purpose:
+    - To group data into meaningful categories for targeted insights.
+    - To enable customer segmentation, product categorization, and behavioral analysis.
+    - To support marketing strategies and inventory management decisions.
+SQL Functions Used:
+    - CASE, GROUP BY, CTE (WITH), DATEDIFF(), SUM(), COUNT(), MIN(), MAX()
+===============================================================================
+*/
+
+-- Segment products into cost ranges and count products in each tier
+WITH product_segment AS (
+    SELECT product_key,product_name,cost,
+           CASE 
+               WHEN cost < 100 THEN 'Below 100'
+               WHEN cost BETWEEN 100 AND 500 THEN '100-500'
+               WHEN cost BETWEEN 500 AND 1000 THEN '500-1000'
+               ELSE 'Above 1000'
+           END AS cost_range
+    FROM gold.dim_products
+) 
+SELECT cost_range,COUNT(product_key) AS total_products
+FROM product_segment
+GROUP BY cost_range
+ORDER BY total_products DESC;
+
+-- Classify customers into VIP, Regular, or New segments based on spending and tenure
+WITH customer_spending AS (
+    SELECT c.customer_key,
+           SUM(sales_amount) AS total_spending,
+           MIN(order_date) AS first_orders,
+           MAX(order_date) AS last_orders,
+           DATEDIFF(MONTH,MIN(order_date),MAX(order_date)) AS life_span
+    FROM gold.fact_sales f
+    LEFT JOIN gold.dim_customers c ON f.customer_key=c.customer_key 
+    GROUP BY c.customer_key
+)
+SELECT customer_segment,COUNT(customer_key) AS total
+FROM (
+    SELECT customer_key,total_spending,life_span,
+           CASE
+               WHEN life_span >= 12 AND total_spending > 5000 THEN 'VIP'
+               WHEN life_span >= 12 AND total_spending <= 5000 THEN 'Regular'
+               ELSE 'New'
+           END AS customer_segment
+    FROM customer_spending
+) t
+GROUP BY customer_segment
+ORDER BY total DESC;
+
+/*
+===============================================================================
+Usage Notes:
+    - Product segmentation helps with pricing strategies and inventory planning.
+    - Customer segments: VIP (12+ months, €5K+ spending), Regular (12+ months, ≤€5K), New (<12 months).
+    - Adjust spending thresholds and tenure periods based on business requirements.
+===============================================================================
+*/
